@@ -1,6 +1,6 @@
 require 'test_helper'
 
-class MSAbundanceSim < Minitest::Test
+class MSAbundanceSimTest < Minitest::Test
   def test_that_it_has_a_version_number
     refute_nil ::MSAbundanceSim::VERSION
   end

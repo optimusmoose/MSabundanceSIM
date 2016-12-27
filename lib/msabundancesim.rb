@@ -18,51 +18,55 @@ control_n = 5 						# how many control samples to generate
 
 case_n = 5 								# how many case samples to generate
 
-diff_express_percent = 3 	# what percent of proteins to differentially express 
+diff_express_percent = 3 	# what percent of proteins to differentially express
 													# between case and control
 
-control_variance = 1	 		# Variance for control samples (max lambda for Poisson distribution). 
+control_variance = 1	 		# Variance for control samples (max lambda for Poisson distribution).
 													# The higher the value, the more fold change will occur
-											 		# among healthy populations. Used only when multiple 
+											 		# among healthy populations. Used only when multiple
 													# abundances are not provided in master fasta. Modification
 													# not recommended.
 
-case_variance = 2 				# Variance increase for case samples (max lambda for Poisson distribution). 													# The higher the value, the more fold change will occur. 
+case_variance = 2 				# Variance increase for case samples (max lambda for Poisson distribution). 													# The higher the value, the more fold change will occur.
 
 ##########################
 
 class Integer
   def factorial
-    f = 1; for i in 1..self; f *= i; end; f
+    # https://www.rosettacode.org/wiki/Factorial#Ruby (fastest and most concise)
+    (2..self).reduce(1, :*)
   end
 end
 
-def poisson(lambda, k)
-	return lambda**k * Math.exp(-lambda) / k.factorial.to_f
+# event_rate (lambda)
+# num_occurences (k)
+def poisson(event_rate, num_occurences)
+	return event_rate**num_occurences * Math.exp(-event_rate) / num_occurences.factorial.to_f
 end
 
-def inverse_transform_sample(lambda)
-	max = poisson(lambda, lambda)
-	y = rand * (max) 
-	ks = (0..lambda*4).to_a.shuffle # attempt to capture the entire distribution without wasting tests
-	ks.each do |k|
-		p_k = poisson(lambda, k)
-		return k if y < p_k
+# probability (y)
+def inverse_transform_sample(event_rate)
+	max = poisson(event_rate, event_rate)
+	probability = rand * (max)
+	list_of_num_occurrences = (0..event_rate*4).to_a.shuffle # attempt to capture the entire distribution without wasting tests
+	list_of_num_occurrences.each do |num_occurences|
+		p_num_occurences = poisson(event_rate, num_occurences)
+		return num_occurences if probability < p_num_occurences
 	end
-	puts "Problem: Should have found a k in inverse_transform_sample"
+	puts "Problem: Should have found a num_occurences in inverse_transform_sample"
 end
 
-def get_fold_change_clean(a_i, lambda)
+def get_fold_change_clean(a_i, event_rate)
 	# max fold change at lowest abundance
-	raw_fc = inverse_transform_sample(lambda)
-	norm_fc = raw_fc 
+	raw_fc = inverse_transform_sample(event_rate)
+	norm_fc = raw_fc
 	sign = [1,-1].sample
 	return norm_fc * sign
 end
- 
-def get_fold_change(a_i, lambda)
+
+def get_fold_change(a_i, event_rate)
 	# max fold change at lowest abundance
-	raw_fc = inverse_transform_sample(lambda)
+	raw_fc = inverse_transform_sample(event_rate)
 	norm_fc = raw_fc * (1.0-(a_i[0].to_f / $abundance_max))
 	pert_fc = norm_fc * rand
 	sign = [1,-1].sample
@@ -94,7 +98,7 @@ $abundance_min = 9999999999999999999
 while line = master_fasta.gets
 	line = line.chop
 	if line.index(">") != nil #first line of entry
-		
+
 		unless abundances.size == 0 # first time
 			abundances.sort!
 
@@ -142,7 +146,7 @@ sample_n = case_n + control_n
 			type = 'control'
 		end
 
-		outfile.puts "#{protein[0][0]} + ##{sample_abundance(protein[1], get_fold_change(protein[1], type=='control' ? control_variance : case_variance))}" 
+		outfile.puts "#{protein[0][0]} + ##{sample_abundance(protein[1], get_fold_change(protein[1], type=='control' ? control_variance : case_variance))}"
 		protein[0][1..-1].each do |additional_line|
 			outfile.puts additional_line
 		end

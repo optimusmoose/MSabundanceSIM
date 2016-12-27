@@ -2,34 +2,11 @@
 # Released under GNU GPLv3
 # Contact Rob Smith at robert.smith@mso.umt.edu for other licensing options.
 
-#Input:
-# FASTA with one or more abundances per protein, included on first line of each entry after # and separated with ,
-# OR text file with each line containing a label of your choice with abundances in the same format as above
-#Output:
-# FASTAs with readme (parameters), postfixed with _case or _control
-# OR text file with each line formatted similarly
+require 'optparse'
 
-##########################
-## PARAMETERS:
-#master_fasta = File.open("9606-PA_plasma.fasta","r") # Master fasta file
-master_fasta = File.open("test.fasta","r") # Master fasta file
-
-control_n = 5 						# how many control samples to generate
-
-case_n = 5 								# how many case samples to generate
-
-diff_express_percent = 3 	# what percent of proteins to differentially express
-													# between case and control
-
-control_variance = 1	 		# Variance for control samples (max lambda for Poisson distribution).
-													# The higher the value, the more fold change will occur
-											 		# among healthy populations. Used only when multiple
-													# abundances are not provided in master fasta. Modification
-													# not recommended.
-
-case_variance = 2 				# Variance increase for case samples (max lambda for Poisson distribution). 													# The higher the value, the more fold change will occur.
-
-##########################
+module MSAbundanceSim
+  VERSION = "0.1.0"
+end
 
 class Integer
   def factorial
@@ -90,65 +67,128 @@ def sample_abundance(abundances, fold_change)
 	return abundance + [1,-1].sample * rand * 0.1 * abundance
 end
 
-entries = []
-abundances = []
-proteins = [] # [0] is list of fasta lines, [1] is abundances list
-$abundance_max = 0
-$abundance_min = 9999999999999999999
-while line = master_fasta.gets
-	line = line.chop
-	if line.index(">") != nil #first line of entry
+DEFAULTS = {
+  num_control: 5,
+  num_case: 5,
+  diff_express_percent: 3.0,
+  control_variance: 1.0,
+  case_variance: 2.0,
+}
 
-		unless abundances.size == 0 # first time
-			abundances.sort!
+opts = {}
+parser = OptionParser.new do |op|
+  op.banner = "usage: #{ms_abundance_sim} <file>.fasta ..."
+  op.separator "output: <file>_<n>_<case|control>"
+  op.separator ""
+  op.separator "The file must have one or more abundances per protein entry (the protein"
+  op.separator "sequence following the header line is optional)."
+  op.separator "The abundance is placed at the end of the line following a ' # ',"
+  op.separator "with multiple abundances separated with a ','.  Here are two examples:"
+  op.separator ""
+  op.separator "> SWISSAB|23B The anchor protein # 23.2"
+  op.separator "> SWISSSPECIAL|24B A green protein # 23.2,29.4"
+  op.separator ""
+  op.separator "notes: Protein sequences are optional and files need not end in '.fasta'"
 
-			# process last fasta entry
-			proteins << [entries,abundances]
-			entries = []
-			abundances = []
-		end
+  op.on(
+    "--num-control <#{DEFAULTS[:num_control]}>",
+    Integer,
+    "how many control samples to generate"
+  ) {|v| opts[:num_control] = v }
 
-		# grab intensit[ies] of this entry
-		parts = line.split("#")
-		abundance = parts[1].to_f
-		abundances << abundance
-		entries << parts[0]
+  op.on(
+    "--num-case <#{DEFAULTS[:num_case]}>",
+    Integer,
+    "how many case samples to generate"
+  ) {|v| opts[:num_case] = v }
 
-		$abundance_max = abundance if abundance > $abundance_max
-		$abundance_min = abundance if abundance < $abundance_min
+  op.on(
+    "--diff_express_percent <#{DEFAULTS[:diff_express_percent]}>",
+    Float,
+    "percent of proteins to differentially express between case and control"
+  ) {|v| opts[:diff_express_percent] = v }
 
-		line = parts[0]
-	else
-		entries << line
-	end
+  op.on(
+    "--control-variance <#{DEFAULTS[:control_variance]}>",
+    Float,
+    "Variance for control samples (max lambda for Poisson distribution). ",
+    "The higher the value, the more fold change will occur among healthy populations. ",
+    "Used only when multiple abundances are not provided in master fasta. ",
+    "Not recommended to modify this parameter."
+  ) {|v| opts[:control_variance] = v }
+
+  op.on(
+    "--case-variance <#{DEFAULTS[:case_variance]}>",
+    Float,
+    "Variance increase for case samples (max lambda for Poisson distribution). ",
+    "The higher the value, the more fold change will occur."
+  ) {|v| opts[:case_variance] = v }
 end
 
-# generate which proteins will be differentially expressed
-diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * diff_express_percent/100.0).to_i)
-diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
+parser.parse!
+opts[:filenames] = ARGV.to_a
 
-sample_n = case_n + control_n
-(0..sample_n).each do |n| # for each sample
-	type = "control"
-	if n < case_n # make a case sample
-		type = "case"
-	end
-	puts "Creating sample #{n} of #{sample_n}"
+opts[:filenames].each do |filename|
+  entries = []
+  abundances = []
+  proteins = [] # [0] is list of fasta lines, [1] is abundances list
+  $abundance_max = 0
+  $abundance_min = 9999999999999999999
+  IO.foreach(filename) do |line|
+    line = line.chop
+    if line.index(">") != nil #first line of entry
 
-	# create output file
-	outfile = File.open("#{n}_#{type}","w")
-	proteins.each_with_index do |protein, idx|
-		# put first line of fasta with simulated abundance
-		sign = [1,-1].sample
-		if type=='case' and diff_expressed_ids.index(idx) != nil
-			sign = diff_expressed_signs[idx]
-		else
-			type = 'control'
-		end
+      unless abundances.size == 0 # first time
+        abundances.sort!
 
-		outfile.puts "#{protein[0][0]} + ##{sample_abundance(protein[1], get_fold_change(protein[1], type=='control' ? control_variance : case_variance))}"
-		protein[0][1..-1].each do |additional_line|
-			outfile.puts additional_line
-		end
-	end
+        # process last fasta entry
+        proteins << [entries,abundances]
+        entries = []
+        abundances = []
+      end
+
+      # grab intensit[ies] of this entry
+      parts = line.split("#")
+      abundance = parts[1].to_f
+      abundances << abundance
+      entries << parts[0]
+
+      $abundance_max = abundance if abundance > $abundance_max
+      $abundance_min = abundance if abundance < $abundance_min
+
+      line = parts[0]
+    else
+      entries << line
+    end
+  end
+
+  # generate which proteins will be differentially expressed
+  diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * diff_express_percent/100.0).to_i)
+  diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
+
+  sample_n = case_n + control_n
+  (0..sample_n).each do |n| # for each sample
+    type = "control"
+    if n < case_n # make a case sample
+      type = "case"
+    end
+    puts "Creating sample #{n} of #{sample_n}"
+
+    # create output file
+    outfile = File.open("#{n}_#{type}","w")
+    proteins.each_with_index do |protein, idx|
+      # put first line of fasta with simulated abundance
+      sign = [1,-1].sample
+      if type=='case' and diff_expressed_ids.index(idx) != nil
+        sign = diff_expressed_signs[idx]
+      else
+        type = 'control'
+      end
+
+      outfile.puts "#{protein[0][0]} + ##{sample_abundance(protein[1], get_fold_change(protein[1], type=='control' ? control_variance : case_variance))}"
+      protein[0][1..-1].each do |additional_line|
+        outfile.puts additional_line
+      end
+    end
+  end
 end

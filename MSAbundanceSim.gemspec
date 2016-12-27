@@ -1,17 +1,17 @@
 # coding: utf-8
 lib = File.expand_path('../lib', __FILE__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
-require 'MSabundanceSIM/version'
+require 'ms_abundance_sim/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "MSabundanceSIM"
-  spec.version       = MSabundanceSIM::VERSION
+  spec.name          = "MSAbundanceSim"
+  spec.version       = MSAbundanceSim::VERSION
   spec.authors       = ["Rob Smith, John T. Prince"]
   spec.email         = ["2robsmith@gmail.com", "jtprince@gmail.com"]
 
   spec.summary       = %q{Simulate protein abundances.}
   spec.description   = %q{Simulate protein abundances given FASTA files.}
-  spec.homepage      = "https://github.com/optimusmoose/MSabundanceSIM"
+  spec.homepage      = "https://github.com/optimusmoose/MSAbundanceSim"
 
   spec.files         = `git ls-files -z`.split("\x0").reject do |f|
     f.match(%r{^(test|spec|features)/})

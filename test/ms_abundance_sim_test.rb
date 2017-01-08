@@ -22,9 +22,9 @@ describe MSAbundanceSim do
     reply.must_equal 3
   end
 
-  #it "samples a list of abundances" do
-  #  reply = MSAbundanceSim.sample_abundance([29, 30, 88, 1000], 2)
-  #  p reply
-  #end
+  it "samples a list of abundances" do
+    reply = MSAbundanceSim.sample_abundance([29, 30], 2)
+    p reply
+  end
 
 end

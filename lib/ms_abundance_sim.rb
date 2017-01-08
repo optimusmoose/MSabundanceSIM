@@ -1,9 +1,12 @@
 #!/usr/bin/env ruby
-# Author: Rob Smith
+#
+# Authors: (primary) Rob Smith and (secondary) John T. Prince
 # Released under GNU GPLv3
 # Contact Rob Smith at robert.smith@mso.umt.edu for other licensing options.
 
 require 'optparse'
+
+# REMOVE THIS
 srand(47288)
 
 module MSAbundanceSim

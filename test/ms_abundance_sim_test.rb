@@ -23,8 +23,8 @@ describe MSAbundanceSim do
   end
 
   it "samples a list of abundances" do
-    reply = MSAbundanceSim.sample_abundance([29, 30], 2)
-    p reply
+    reply = MSAbundanceSim.sample_abundance([0.187], -1.24)
+    reply.must_equal 0.08406721711401088
   end
 
 end

@@ -27,4 +27,8 @@ describe MSAbundanceSim do
     reply.must_equal 0.08406721711401088
   end
 
+  it "writes cases and controls for a real file" do
+    # working here
+  end
+
 end

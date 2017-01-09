@@ -118,9 +118,10 @@ module MSAbundanceSim
           protein_entries.last.additional_lines << line
         end
       end
-      protein_entries
       ### BROKEN BEHAVIOR
       protein_entries[0...-1]
+      ### CORRECT BEHAVIOR:
+      #protein_entries
     end
 
     # returns the list of case and control filenames generated
@@ -139,7 +140,9 @@ module MSAbundanceSim
 
       output = Hash.new {|hash, key| hash[key] = [] }
       total_num_samples = opts[:num_case] + opts[:num_control]
-      (0...total_num_samples).each do |sample_number| # for each sample
+      original_broken_behavior = 0..total_num_samples
+      #correct_behavior = 0...total_num_samples
+      original_broken_behavior.each do |sample_number| # for each sample
         type = :control
         if sample_number < num_case # make a case sample
           type = :case

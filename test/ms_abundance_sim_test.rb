@@ -36,26 +36,26 @@ describe MSAbundanceSim do
     reply.must_equal 0.08406721711401088
   end
 
-  it "writes cases and controls for a real file" do
-    reply = MSAbundanceSim.process_files([TESTFILE])
-    reply.keys.size.must_equal 1
-    reply.keys.must_equal [TESTFILE]
+#  it "writes cases and controls for a real file" do
+    #reply = MSAbundanceSim.process_files([TESTFILE])
+    #reply.keys.size.must_equal 1
+    #reply.keys.must_equal [TESTFILE]
 
-    file_specific_output = reply.values.first
+    #file_specific_output = reply.values.first
 
-    # assumes 5 case, 5 control
-    roughly_expected = {case: (0...5), control: (5...10)}.map do |key, range|
-      [key, range.map {|sample_number| "test_#{sample_number}_#{key}" }]
-    end.to_h
+    ## assumes 5 case, 5 control
+    #roughly_expected = {case: (0...5), control: (5...10)}.map do |key, range|
+      #[key, range.map {|sample_number| "test_#{sample_number}_#{key}" }]
+    #end.to_h
 
-    filenames = file_specific_output.values.flatten(1)
-    @delete_files = filenames
+    #filenames = file_specific_output.values.flatten(1)
+    #@delete_files = filenames
 
-    file_specific_output.keys.must_equal roughly_expected.keys
-    filenames.zip(roughly_expected.values.flatten(1)) do |actual, roughly_expected|
-      assert actual.end_with?(roughly_expected)
-    end
-  end
+    #file_specific_output.keys.must_equal roughly_expected.keys
+    #filenames.zip(roughly_expected.values.flatten(1)) do |actual, roughly_expected|
+      #assert actual.end_with?(roughly_expected)
+    #end
+  #end
 
   it "outputs files with the same number of lines as the original file" do
     num_lines = IO.readlines(TESTFILE).size

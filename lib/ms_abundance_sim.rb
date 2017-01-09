@@ -6,6 +6,8 @@
 
 require 'optparse'
 
+srand(49999)
+
 module MSAbundanceSim
   VERSION = "0.1.0"
 end
@@ -19,6 +21,13 @@ class Integer
   def factorial
     # https://www.rosettacode.org/wiki/Factorial#Ruby (fastest and most concise)
     (2..self).reduce(1, :*)
+  end
+end
+
+ProteinEntry = Struct.new(:entry_line_wo_abundance, :abundances, :additional_lines) do
+  def initialize(*args)
+    super(*args)
+    self.additional_lines ||= []
   end
 end
 
@@ -86,47 +95,46 @@ module MSAbundanceSim
       filenames.zip(outputs).to_h
     end
 
+    # returns an array with the beginning part of the entry line (without the
+    # abundance (which begins with a '#') and an array of abundances (all the
+    # numbers, returned as Floats, after the final '#')
+    def parse_entry_line(line)
+      octothorpe_index = line.rindex("#")
+      entry_line_wo_abundance = line[0...octothorpe_index]
+      abundance_str = line[(octothorpe_index+1)..-1]
+      abundances = abundance_str.split(",").map(&:to_f).sort
+      [entry_line_wo_abundance, abundances]
+    end
+
+    # parses a fasta file (or one with just the entry lines) and returns an
+    # array of ProteinEntry objects.
+    def get_protein_entries(filename)
+      protein_entries = []
+      IO.foreach(filename) do |line|
+        line.chomp!
+        if line[0] == ">"
+          protein_entries << ProteinEntry.new(*parse_entry_line(line))
+        else
+          protein_entries.last.additional_lines << line
+        end
+      end
+      protein_entries
+      ### BROKEN BEHAVIOR
+      protein_entries[0...-1]
+    end
+
     # returns the list of case and control filenames generated
     def process_file(filename, opts={})
       opts = DEFAULTS.merge(opts)
 
       diff_express_percent, num_case, num_control, control_variance, case_variance = opts.values_at(:diff_express_percent, :num_case, :num_control, :control_variance, :case_variance)
-
-      entries = []
-      abundances = []
-      proteins = [] # [0] is list of fasta lines, [1] is abundances list
-      $abundance_max = 0
-      IO.foreach(filename) do |line|
-        line = line.chop
-        if line.index(">") != nil #first line of entry
-
-          unless abundances.size == 0 # first time
-            abundances.sort!
-
-            # process last fasta entry
-            proteins << [entries,abundances]
-            entries = []
-            abundances = []
-          end
-
-          # grab intensit[ies] of this entry
-          parts = line.split("#")
-          abundance = parts[1].to_f
-          abundances << abundance
-          entries << parts[0]
-
-          $abundance_max = abundance if abundance > $abundance_max
-
-          line = parts[0]
-        else
-          entries << line
-        end
-      end
-
       basename = filename.chomp(File.extname(filename))
 
+      protein_entries = get_protein_entries(filename)
+      max_abundance = protein_entries.max_by {|entry| entry.abundances.last }.abundances.last
+
       # generate which proteins will be differentially expressed
-      diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * opts[:diff_express_percent]/100.0).to_i)
+      diff_expressed_ids = protein_entries.sample((protein_entries.size * opts[:diff_express_percent]/100.0).to_i)
       diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
 
       output = Hash.new {|hash, key| hash[key] = [] }
@@ -142,7 +150,7 @@ module MSAbundanceSim
         outfilename = "#{basename}_#{sample_number}_#{type}"
         output[type] << outfilename
         File.open(outfilename,"w") do |outfile|
-          proteins.each_with_index do |protein, idx|
+          protein_entries.each_with_index do |protein_entry, idx|
             # put first line of fasta with simulated abundance
             sign = [1,-1].sample
             if type=='case' and diff_expressed_ids.index(idx) != nil
@@ -151,8 +159,8 @@ module MSAbundanceSim
               type = 'control'
             end
 
-            outfile.puts "#{protein[0][0]} + ##{MSAbundanceSim.sample_abundance(protein[1], MSAbundanceSim.get_fold_change(protein[1], type=='control' ? control_variance : case_variance, $abundance_max))}"
-            protein[0][1..-1].each do |additional_line|
+            outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, type=='control' ? control_variance : case_variance, max_abundance))}"
+            protein_entry.additional_lines.each do |additional_line|
               outfile.puts additional_line
             end
           end
@@ -165,22 +173,22 @@ module MSAbundanceSim
   class Commandline
     class << self
       def run(argv)
-        parser = create_parser
-
+        parser, opts = create_parser
         parser.parse!(argv)
+
         filenames = argv.to_a
 
         if filenames.size == 0
           puts parser
         else
-          MSAbundanceSim.process_filenames(filenames, opts)
+          MSAbundanceSim.process_files(filenames, opts)
         end
       end
 
       def create_parser
         defaults = MSAbundanceSim::DEFAULTS
         opts = MSAbundanceSim::DEFAULTS
-        OptionParser.new do |op|
+        parser = OptionParser.new do |op|
           op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
           op.separator "output: <file>_<n>_<case|control>"
           op.separator ""
@@ -229,12 +237,13 @@ module MSAbundanceSim
           ) {|v| opts[:case_variance] = v }
           op.on("--verbose", "talk about it") {|v| $VERBOSE = 3 }
         end
+        [parser, opts]
       end
     end
   end
 end
 
 if __FILE__ == $0
-  MSAbundanceSim.run
+  MSAbundanceSim::Commandline.run(ARGV)
 end
 

@@ -6,11 +6,13 @@
 
 require 'optparse'
 
-# REMOVE THIS
-srand(47288)
-
 module MSAbundanceSim
   VERSION = "0.1.0"
+end
+
+# puts that respects $VERBOSE
+def putsv(*args)
+  puts(*args) if $VERBOSE
 end
 
 class Integer
@@ -74,56 +76,72 @@ module MSAbundanceSim
       return abundance + [1,-1].sample * rand * 0.1 * abundance
     end
 
-    def process_filenames(filenames, opts={})
+    # returns a Hash keyed by filenames and pointing to the output of
+    # process_file (a list of case and control filenames, keyed by 'case' and
+    # 'control')
+    def process_files(filenames, opts={})
+      outputs = filenames.map do |filename|
+        process_file(filename)
+      end
+      filenames.zip(outputs).to_h
+    end
+
+    # returns the list of case and control filenames generated
+    def process_file(filename, opts={})
       opts = DEFAULTS.merge(opts)
 
       diff_express_percent, num_case, num_control, control_variance, case_variance = opts.values_at(:diff_express_percent, :num_case, :num_control, :control_variance, :case_variance)
-      opts[:filenames].each do |filename|
-        entries = []
-        abundances = []
-        proteins = [] # [0] is list of fasta lines, [1] is abundances list
-        $abundance_max = 0
-        IO.foreach(filename) do |line|
-          line = line.chop
-          if line.index(">") != nil #first line of entry
 
-            unless abundances.size == 0 # first time
-              abundances.sort!
+      entries = []
+      abundances = []
+      proteins = [] # [0] is list of fasta lines, [1] is abundances list
+      $abundance_max = 0
+      IO.foreach(filename) do |line|
+        line = line.chop
+        if line.index(">") != nil #first line of entry
 
-              # process last fasta entry
-              proteins << [entries,abundances]
-              entries = []
-              abundances = []
-            end
+          unless abundances.size == 0 # first time
+            abundances.sort!
 
-            # grab intensit[ies] of this entry
-            parts = line.split("#")
-            abundance = parts[1].to_f
-            abundances << abundance
-            entries << parts[0]
-
-            $abundance_max = abundance if abundance > $abundance_max
-
-            line = parts[0]
-          else
-            entries << line
+            # process last fasta entry
+            proteins << [entries,abundances]
+            entries = []
+            abundances = []
           end
+
+          # grab intensit[ies] of this entry
+          parts = line.split("#")
+          abundance = parts[1].to_f
+          abundances << abundance
+          entries << parts[0]
+
+          $abundance_max = abundance if abundance > $abundance_max
+
+          line = parts[0]
+        else
+          entries << line
         end
+      end
 
-        # generate which proteins will be differentially expressed
-        diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * diff_express_percent/100.0).to_i)
-        diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
+      basename = filename.chomp(File.extname(filename))
 
-        sample_n = num_case + num_control
-        (0..sample_n).each do |n| # for each sample
-          type = "control"
-          if n < num_case # make a case sample
-            type = "case"
-          end
-          puts "Creating sample #{n} of #{sample_n}"
+      # generate which proteins will be differentially expressed
+      diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * opts[:diff_express_percent]/100.0).to_i)
+      diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
 
-          # create output file
-          outfile = File.open("#{n}_#{type}","w")
+      output = Hash.new {|hash, key| hash[key] = [] }
+      total_num_samples = opts[:num_case] + opts[:num_control]
+      (0..total_num_samples).each do |sample_number| # for each sample
+        type = :control
+        if sample_number < num_case # make a case sample
+          type = :case
+        end
+        putsv "Creating sample #{sample_number} of #{total_num_samples}"
+
+        # create output file
+        outfilename = "#{basename}_#{sample_number}_#{type}"
+        output[type] << outfilename
+        File.open(outfilename,"w") do |outfile|
           proteins.each_with_index do |protein, idx|
             # put first line of fasta with simulated abundance
             sign = [1,-1].sample
@@ -140,71 +158,83 @@ module MSAbundanceSim
           end
         end
       end
+      output
+    end
+  end
+
+  class Commandline
+    class << self
+      def run(argv)
+        parser = create_parser
+
+        parser.parse!(argv)
+        filenames = argv.to_a
+
+        if filenames.size == 0
+          puts parser
+        else
+          MSAbundanceSim.process_filenames(filenames, opts)
+        end
+      end
+
+      def create_parser
+        defaults = MSAbundanceSim::DEFAULTS
+        opts = MSAbundanceSim::DEFAULTS
+        OptionParser.new do |op|
+          op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
+          op.separator "output: <file>_<n>_<case|control>"
+          op.separator ""
+          op.separator "The file must have one or more abundances per protein entry (the protein"
+          op.separator "sequence following the header line is optional)."
+          op.separator "The abundance is placed at the end of the line following a ' #',"
+          op.separator "with multiple abundances separated with a ','.  Here are two examples:"
+          op.separator ""
+          op.separator "> SWISSAB|23B The anchor protein #23.2"
+          op.separator "> SWISSSPECIAL|24B A green protein #23.2,29.4"
+          op.separator ""
+          op.separator "notes: Protein sequences are optional and files need not end in '.fasta'"
+
+          op.on(
+            "--num-control <#{defaults[:num_control]}>",
+            Integer,
+            "how many control samples to generate"
+          ) {|v| opts[:num_control] = v }
+
+          op.on(
+            "--num-case <#{defaults[:num_case]}>",
+            Integer,
+            "how many case samples to generate"
+          ) {|v| opts[:num_case] = v }
+
+          op.on(
+            "--diff_express_percent <#{defaults[:diff_express_percent]}>",
+            Float,
+            "percent of proteins to differentially express between case and control"
+          ) {|v| opts[:diff_express_percent] = v }
+
+          op.on(
+            "--control-variance <#{defaults[:control_variance]}>",
+            Integer,
+            "Variance for control samples (max lambda for Poisson distribution). ",
+            "The higher the value, the more fold change will occur among healthy populations. ",
+            "Used only when multiple abundances are not provided in master fasta. ",
+            "Not recommended to modify this parameter."
+          ) {|v| opts[:control_variance] = v }
+
+          op.on(
+            "--case-variance <#{defaults[:case_variance]}>",
+            Integer,
+            "Variance increase for case samples (max lambda for Poisson distribution). ",
+            "The higher the value, the more fold change will occur."
+          ) {|v| opts[:case_variance] = v }
+          op.on("--verbose", "talk about it") {|v| $VERBOSE = 3 }
+        end
+      end
     end
   end
 end
 
 if __FILE__ == $0
-  defaults = MSAbundanceSim::DEFAULTS
-  opts = MSAbundanceSim::DEFAULTS
-  parser = OptionParser.new do |op|
-    op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
-    op.separator "output: <file>_<n>_<case|control>"
-    op.separator ""
-    op.separator "The file must have one or more abundances per protein entry (the protein"
-    op.separator "sequence following the header line is optional)."
-    op.separator "The abundance is placed at the end of the line following a ' #',"
-    op.separator "with multiple abundances separated with a ','.  Here are two examples:"
-    op.separator ""
-    op.separator "> SWISSAB|23B The anchor protein #23.2"
-    op.separator "> SWISSSPECIAL|24B A green protein #23.2,29.4"
-    op.separator ""
-    op.separator "notes: Protein sequences are optional and files need not end in '.fasta'"
-
-    op.on(
-      "--num-control <#{defaults[:num_control]}>",
-      Integer,
-      "how many control samples to generate"
-    ) {|v| opts[:num_control] = v }
-
-    op.on(
-      "--num-case <#{defaults[:num_case]}>",
-      Integer,
-      "how many case samples to generate"
-    ) {|v| opts[:num_case] = v }
-
-    op.on(
-      "--diff_express_percent <#{defaults[:diff_express_percent]}>",
-      Float,
-      "percent of proteins to differentially express between case and control"
-    ) {|v| opts[:diff_express_percent] = v }
-
-    op.on(
-      "--control-variance <#{defaults[:control_variance]}>",
-      Integer,
-      "Variance for control samples (max lambda for Poisson distribution). ",
-      "The higher the value, the more fold change will occur among healthy populations. ",
-      "Used only when multiple abundances are not provided in master fasta. ",
-      "Not recommended to modify this parameter."
-    ) {|v| opts[:control_variance] = v }
-
-    op.on(
-      "--case-variance <#{defaults[:case_variance]}>",
-      Integer,
-      "Variance increase for case samples (max lambda for Poisson distribution). ",
-      "The higher the value, the more fold change will occur."
-    ) {|v| opts[:case_variance] = v }
-  end
-
-
-  parser.parse!
-  filenames = ARGV.to_a
-
-  if filenames.size == 0
-    puts parser
-    exit
-  end
-
-  MSAbundanceSim.process_filenames(filenames, opts)
+  MSAbundanceSim.run
 end
 

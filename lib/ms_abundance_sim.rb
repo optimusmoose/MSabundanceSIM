@@ -131,7 +131,7 @@ module MSAbundanceSim
 
       output = Hash.new {|hash, key| hash[key] = [] }
       total_num_samples = opts[:num_case] + opts[:num_control]
-      (0..total_num_samples).each do |sample_number| # for each sample
+      (0...total_num_samples).each do |sample_number| # for each sample
         type = :control
         if sample_number < num_case # make a case sample
           type = :case

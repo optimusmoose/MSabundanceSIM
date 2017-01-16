@@ -9,8 +9,20 @@ require 'optparse'
 # REMOVE THIS
 srand(47288)
 
-module MSAbundanceSim
+class MSAbundanceSim
   VERSION = "0.1.0"
+end
+
+# puts that respects $VERBOSE
+def putsv(*args)
+  puts(*args) if $VERBOSE
+end
+
+ProteinEntry = Struct.new(:entry_line_wo_abundance, :abundances, :additional_lines) do
+  def initialize(*args)
+    super(*args)
+    self.additional_lines ||= []
+  end
 end
 
 class Integer
@@ -20,7 +32,7 @@ class Integer
   end
 end
 
-module MSAbundanceSim
+class MSAbundanceSim
   DEFAULTS = {
     num_control: 5,
     num_case: 5,
@@ -73,6 +85,37 @@ module MSAbundanceSim
       end
       return abundance + [1,-1].sample * rand * 0.1 * abundance
     end
+  end
+
+  def get_protein_entries(filename)
+    entries = []
+    abundances = []
+    proteins = [] # [0] is list of fasta lines, [1] is abundances list
+    IO.foreach(filename) do |line|
+      line = line.chop
+      if line.index(">") != nil #first line of entry
+
+        unless abundances.size == 0 # first time
+          abundances.sort!
+
+          # process last fasta entry
+          proteins << [entries,abundances]
+          entries = []
+          abundances = []
+        end
+
+        # grab intensit[ies] of this entry
+        parts = line.split("#")
+        abundance = parts[1].to_f
+        abundances << abundance
+        entries << parts[0]
+
+        line = parts[0]
+      else
+        entries << line
+      end
+    end
+    proteins
   end
 end
 
@@ -140,37 +183,11 @@ if __FILE__ == $0
   #########################################
   diff_express_percent, num_case, num_control, control_variance, case_variance = opts.values_at(:diff_express_percent, :num_case, :num_control, :control_variance, :case_variance)
 
+  simulator = MSAbundanceSim.new
+
   opts[:filenames].each do |filename|
-    entries = []
-    abundances = []
-    proteins = [] # [0] is list of fasta lines, [1] is abundances list
-    $abundance_max = 0
-    IO.foreach(filename) do |line|
-      line = line.chop
-      if line.index(">") != nil #first line of entry
-
-        unless abundances.size == 0 # first time
-          abundances.sort!
-
-          # process last fasta entry
-          proteins << [entries,abundances]
-          entries = []
-          abundances = []
-        end
-
-        # grab intensit[ies] of this entry
-        parts = line.split("#")
-        abundance = parts[1].to_f
-        abundances << abundance
-        entries << parts[0]
-
-        $abundance_max = abundance if abundance > $abundance_max
-
-        line = parts[0]
-      else
-        entries << line
-      end
-    end
+    proteins = simulator.get_protein_entries(filename)
+    max_abundance = proteins.max_by {|protein| protein.last.last }.last.last
 
     # generate which proteins will be differentially expressed
     diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * diff_express_percent/100.0).to_i)
@@ -195,7 +212,7 @@ if __FILE__ == $0
           type = 'control'
         end
 
-        outfile.puts "#{protein[0][0]} + ##{MSAbundanceSim.sample_abundance(protein[1], MSAbundanceSim.get_fold_change(protein[1], type=='control' ? control_variance : case_variance, $abundance_max))}"
+        outfile.puts "#{protein[0][0]} + ##{MSAbundanceSim.sample_abundance(protein[1], MSAbundanceSim.get_fold_change(protein[1], type=='control' ? control_variance : case_variance, max_abundance))}"
         protein[0][1..-1].each do |additional_line|
           outfile.puts additional_line
         end

@@ -186,6 +186,9 @@ if __FILE__ == $0
   simulator = MSAbundanceSim.new
 
   opts[:filenames].each do |filename|
+
+    basename = filename.chomp(File.extname(filename))
+
     proteins = simulator.get_protein_entries(filename)
     max_abundance = proteins.max_by {|protein| protein.last.last }.last.last
 
@@ -194,27 +197,29 @@ if __FILE__ == $0
     diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
 
     sample_n = num_case + num_control
-    (0..sample_n).each do |n| # for each sample
+    (0..sample_n).each do |sample_number| # for each sample
       type = "control"
-      if n < num_case # make a case sample
+      if sample_number < num_case # make a case sample
         type = "case"
       end
-      puts "Creating sample #{n} of #{sample_n}"
+      puts "Creating sample #{sample_number} of #{sample_n}"
 
       # create output file
-      outfile = File.open("#{n}_#{type}","w")
-      proteins.each_with_index do |protein, idx|
-        # put first line of fasta with simulated abundance
-        sign = [1,-1].sample
-        if type=='case' and diff_expressed_ids.index(idx) != nil
-          sign = diff_expressed_signs[idx]
-        else
-          type = 'control'
-        end
+      outfilename = "#{basename}_#{sample_number}_#{type}"
+      File.open(outfilename, 'w') do |outfile|
+        proteins.each_with_index do |protein, idx|
+          # put first line of fasta with simulated abundance
+          sign = [1,-1].sample
+          if type=='case' and diff_expressed_ids.index(idx) != nil
+            sign = diff_expressed_signs[idx]
+          else
+            type = 'control'
+          end
 
-        outfile.puts "#{protein[0][0]} + ##{MSAbundanceSim.sample_abundance(protein[1], MSAbundanceSim.get_fold_change(protein[1], type=='control' ? control_variance : case_variance, max_abundance))}"
-        protein[0][1..-1].each do |additional_line|
-          outfile.puts additional_line
+          outfile.puts "#{protein[0][0]} + ##{MSAbundanceSim.sample_abundance(protein[1], MSAbundanceSim.get_fold_change(protein[1], type=='control' ? control_variance : case_variance, max_abundance))}"
+          protein[0][1..-1].each do |additional_line|
+            outfile.puts additional_line
+          end
         end
       end
     end

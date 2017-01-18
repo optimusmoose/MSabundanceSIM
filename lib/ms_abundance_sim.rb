@@ -87,35 +87,28 @@ class MSAbundanceSim
     end
   end
 
+  # returns an array with the beginning part of the entry line (without the
+  # abundance (which begins with a '#') and an array of abundances (all the
+  # numbers, returned as Floats, after the final '#')
+  def parse_entry_line(line)
+    octothorpe_index = line.rindex("#")
+    entry_line_wo_abundance = line[0...octothorpe_index]
+    abundance_str = line[(octothorpe_index+1)..-1]
+    abundances = abundance_str.split(",").map(&:to_f).sort
+    [entry_line_wo_abundance, abundances]
+  end
+
   def get_protein_entries(filename)
-    entries = []
-    abundances = []
-    proteins = [] # [0] is list of fasta lines, [1] is abundances list
+    protein_entries = []
     IO.foreach(filename) do |line|
-      line = line.chop
-      if line.index(">") != nil #first line of entry
-
-        unless abundances.size == 0 # first time
-          abundances.sort!
-
-          # process last fasta entry
-          proteins << [entries,abundances]
-          entries = []
-          abundances = []
-        end
-
-        # grab intensit[ies] of this entry
-        parts = line.split("#")
-        abundance = parts[1].to_f
-        abundances << abundance
-        entries << parts[0]
-
-        line = parts[0]
+      line.chomp!
+      if line[0] == ">"
+        protein_entries << ProteinEntry.new(*parse_entry_line(line))
       else
-        entries << line
+        protein_entries.last.additional_lines << line
       end
     end
-    proteins
+    protein_entries[0...-1]  # incorrect behavior (dropping last protein)
   end
 end
 
@@ -189,11 +182,11 @@ if __FILE__ == $0
 
     basename = filename.chomp(File.extname(filename))
 
-    proteins = simulator.get_protein_entries(filename)
-    max_abundance = proteins.max_by {|protein| protein.last.last }.last.last
+    protein_entries = simulator.get_protein_entries(filename)
+    max_abundance = protein_entries.max_by {|entry| entry.abundances.last }.abundances.last
 
     # generate which proteins will be differentially expressed
-    diff_expressed_ids = [0..proteins.size-1].sample((proteins.size * diff_express_percent/100.0).to_i)
+    diff_expressed_ids = [0..protein_entries.size-1].sample((protein_entries.size * diff_express_percent/100.0).to_i)
     diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
 
     sample_n = num_case + num_control
@@ -207,7 +200,7 @@ if __FILE__ == $0
       # create output file
       outfilename = "#{basename}_#{sample_number}_#{type}"
       File.open(outfilename, 'w') do |outfile|
-        proteins.each_with_index do |protein, idx|
+        protein_entries.each_with_index do |protein_entry, idx|
           # put first line of fasta with simulated abundance
           sign = [1,-1].sample
           if type=='case' and diff_expressed_ids.index(idx) != nil
@@ -216,8 +209,8 @@ if __FILE__ == $0
             type = 'control'
           end
 
-          outfile.puts "#{protein[0][0]} + ##{MSAbundanceSim.sample_abundance(protein[1], MSAbundanceSim.get_fold_change(protein[1], type=='control' ? control_variance : case_variance, max_abundance))}"
-          protein[0][1..-1].each do |additional_line|
+          outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, type=='control' ? control_variance : case_variance, max_abundance))}"
+          protein_entry.additional_lines.each do |additional_line|
             outfile.puts additional_line
           end
         end

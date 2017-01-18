@@ -33,7 +33,7 @@ class MSAbundanceSim
   DEFAULTS = {
     num_control: 5,
     num_case: 5,
-    diff_express_percent: 3.0,
+    pct_diff_express: 3.0,
     control_variance: 1,
     case_variance: 2,
     output_abundance_separator: " #",
@@ -104,7 +104,7 @@ class MSAbundanceSim
     max_abundance = protein_entries.max_by {|entry| entry.abundances.last }.abundances.last
 
     # generate which proteins will be differentially expressed
-    num_proteins_to_diff_express = (protein_entries.size * opts[:diff_express_percent]/100.0).to_i
+    num_proteins_to_diff_express = (protein_entries.size * opts[:pct_diff_express]/100.0).to_i
     diff_expressed_ids = (0...protein_entries.size).to_a.sample(num_proteins_to_diff_express).to_set
 
     output = Hash.new {|hash, key| hash[key] = [] }
@@ -169,17 +169,33 @@ class MSAbundanceSim
           puts parser
         else
           output = MSAbundanceSim.process_files(filenames, opts)
-          puts output.to_yaml
+          format_and_emit_output(output)
         end
+      end
+
+      def format_and_emit_output(output)
+        # the type keys are symbols--make them strings
+        output_string_types = output.map {|key, value| [key, value.map {|k, v| [k.to_s, v] }.to_h] }.to_h
+        # emit yaml without leading "---"
+        puts output_string_types.to_yaml.gsub(/\A---\n/, '')
       end
 
       def create_parser
         defaults = MSAbundanceSim::DEFAULTS
         opts = MSAbundanceSim::DEFAULTS
         parser = OptionParser.new do |op|
-          op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
-          op.separator "generates: <file>_<n>_<case|control>"
+          op.banner = "usage: #{File.basename(__FILE__)} [options] <file>.fasta ..."
+          op.separator "generates files, each of this form: <file>_<n>_<case|control>"
+          op.separator "  where the specified percentage of proteins have altered abundance (for cases)."
+          op.separator ""
           op.separator "output: (yaml indicating all the related derivative files)"
+          op.separator "  for 2 cases and 1 control the output for file.fasta would be: "
+          op.separator "    file.fasta:"
+          op.separator "      case:"
+          op.separator "      - file_0_case"
+          op.separator "      - file_1_case"
+          op.separator "      control:"
+          op.separator "      - file_2_control"
           op.separator ""
           op.separator "The file must have one or more abundances per protein entry (the protein"
           op.separator "sequence following the header line is optional)."
@@ -190,39 +206,45 @@ class MSAbundanceSim
           op.separator "> SWISSSPECIAL|24B A green protein #23.2,29.4"
           op.separator ""
           op.separator "notes: Protein sequences are optional and files need not end in '.fasta'"
+          op.separator ""
+          op.separator "options (<default>):"
 
           op.on(
             "--num-control <#{defaults[:num_control]}>",
             Integer,
-            "how many control samples to generate"
+            "Number of *control* samples to generate."
           ) {|v| opts[:num_control] = v }
 
           op.on(
             "--num-case <#{defaults[:num_case]}>",
             Integer,
-            "how many case samples to generate"
+            "Number of *case* samples to generate."
           ) {|v| opts[:num_case] = v }
 
           op.on(
-            "--diff_express_percent <#{defaults[:diff_express_percent]}>",
+            "--pct-diff-express <#{defaults[:pct_diff_express]}>",
             Float,
-            "percent of proteins to differentially express between case and control"
-          ) {|v| opts[:diff_express_percent] = v }
+            "Percentage of proteins to differentially ",
+            "  express between case and control."
+          ) {|v| opts[:pct_diff_express] = v }
 
           op.on(
             "--control-variance <#{defaults[:control_variance]}>",
             Integer,
-            "Variance for control samples (max lambda for Poisson distribution). ",
-            "The higher the value, the more fold change will occur among healthy populations. ",
-            "Used only when multiple abundances are not provided in master fasta. ",
-            "Not recommended to modify this parameter."
+            "Variance for control samples (max lambda for",
+            "  Poisson distribution). The higher the value, ",
+            "  the more fold change will occur among healthy ",
+            "  populations. Used only when multiple ",
+            "  abundances are not provided in master fasta. ",
+            "  Not recommended to modify this parameter."
           ) {|v| opts[:control_variance] = v }
 
           op.on(
             "--case-variance <#{defaults[:case_variance]}>",
             Integer,
-            "Variance increase for case samples (max lambda for Poisson distribution). ",
-            "The higher the value, the more fold change will occur."
+            "Variance increase for case samples (max lambda ",
+            "  for Poisson distribution). The higher the ",
+            "  value the more fold change will occur."
           ) {|v| opts[:case_variance] = v }
           op.on("--verbose", "talk about it") {|v| $VERBOSE = 3 }
         end

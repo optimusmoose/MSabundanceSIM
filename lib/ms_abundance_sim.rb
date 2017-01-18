@@ -161,7 +161,7 @@ class MSAbundanceSim
         protein_entries.last.additional_lines << line
       end
     end
-    protein_entries[0...-1]  # incorrect behavior (dropping last protein)
+    protein_entries
   end
 
   class Commandline

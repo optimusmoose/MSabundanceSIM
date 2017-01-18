@@ -109,29 +109,27 @@ class MSAbundanceSim
 
     # generate which proteins will be differentially expressed
     diff_expressed_ids = (0...protein_entries.size).to_a.sample((protein_entries.size * diff_express_percent/100.0).to_i)
-    diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
 
     sample_n = num_case + num_control
     (0...sample_n).each do |sample_number| # for each sample
-      type = "control"
+      sample_type = "control"
       if sample_number < num_case # make a case sample
-        type = "case"
+        sample_type = "case"
       end
       puts "Creating sample #{sample_number} of #{sample_n}"
 
       # create output file
-      outfilename = "#{basename}_#{sample_number}_#{type}"
+      outfilename = "#{basename}_#{sample_number}_#{sample_type}"
       File.open(outfilename, 'w') do |outfile|
         protein_entries.each_with_index do |protein_entry, idx|
           # put first line of fasta with simulated abundance
-          sign = [1,-1].sample
-          if type=='case' and diff_expressed_ids.index(idx) != nil
-            sign = diff_expressed_signs[idx]
+          if sample_type=='case' and diff_expressed_ids.index(idx) != nil
+            protein_type = 'case'
           else
-            type = 'control'
+            protein_type = 'control'
           end
 
-          outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, type=='control' ? control_variance : case_variance, max_abundance))}"
+          outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, protein_type=='control' ? control_variance : case_variance, max_abundance))}"
           protein_entry.additional_lines.each do |additional_line|
             outfile.puts additional_line
           end

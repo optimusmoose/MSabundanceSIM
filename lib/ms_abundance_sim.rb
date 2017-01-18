@@ -42,6 +42,16 @@ class MSAbundanceSim
   }
 
   class << self
+    # returns a Hash keyed by filenames and pointing to the output of
+    # process_file (a list of case and control filenames, keyed by 'case' and
+    # 'control')
+    def process_files(filenames, opts)
+      outputs = filenames.map do |filename|
+        MSAbundanceSim.new.process_file(filename, opts)
+      end
+      filenames.zip(outputs).to_h
+    end
+
     # event_rate (lambda)
     # num_occurences (k)
     def poisson(event_rate, num_occurences)
@@ -87,98 +97,10 @@ class MSAbundanceSim
     end
   end
 
-  # returns an array with the beginning part of the entry line (without the
-  # abundance (which begins with a '#') and an array of abundances (all the
-  # numbers, returned as Floats, after the final '#')
-  def parse_entry_line(line)
-    octothorpe_index = line.rindex("#")
-    entry_line_wo_abundance = line[0...octothorpe_index]
-    abundance_str = line[(octothorpe_index+1)..-1]
-    abundances = abundance_str.split(",").map(&:to_f).sort
-    [entry_line_wo_abundance, abundances]
-  end
+  def process_file(filename, opts)
+    diff_express_percent, num_case, num_control, control_variance, case_variance = opts.values_at(:diff_express_percent, :num_case, :num_control, :control_variance, :case_variance)
 
-  def get_protein_entries(filename)
-    protein_entries = []
-    IO.foreach(filename) do |line|
-      line.chomp!
-      if line[0] == ">"
-        protein_entries << ProteinEntry.new(*parse_entry_line(line))
-      else
-        protein_entries.last.additional_lines << line
-      end
-    end
-    protein_entries[0...-1]  # incorrect behavior (dropping last protein)
-  end
-end
-
-if __FILE__ == $0
-  defaults = MSAbundanceSim::DEFAULTS
-  opts = MSAbundanceSim::DEFAULTS
-  parser = OptionParser.new do |op|
-    op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
-    op.separator "output: <file>_<n>_<case|control>"
-    op.separator ""
-    op.separator "The file must have one or more abundances per protein entry (the protein"
-    op.separator "sequence following the header line is optional)."
-    op.separator "The abundance is placed at the end of the line following a ' #',"
-    op.separator "with multiple abundances separated with a ','.  Here are two examples:"
-    op.separator ""
-    op.separator "> SWISSAB|23B The anchor protein #23.2"
-    op.separator "> SWISSSPECIAL|24B A green protein #23.2,29.4"
-    op.separator ""
-    op.separator "notes: Protein sequences are optional and files need not end in '.fasta'"
-
-    op.on(
-      "--num-control <#{defaults[:num_control]}>",
-      Integer,
-      "how many control samples to generate"
-    ) {|v| opts[:num_control] = v }
-
-    op.on(
-      "--num-case <#{defaults[:num_case]}>",
-      Integer,
-      "how many case samples to generate"
-    ) {|v| opts[:num_case] = v }
-
-    op.on(
-      "--diff_express_percent <#{defaults[:diff_express_percent]}>",
-      Float,
-      "percent of proteins to differentially express between case and control"
-    ) {|v| opts[:diff_express_percent] = v }
-
-    op.on(
-      "--control-variance <#{defaults[:control_variance]}>",
-      Integer,
-      "Variance for control samples (max lambda for Poisson distribution). ",
-      "The higher the value, the more fold change will occur among healthy populations. ",
-      "Used only when multiple abundances are not provided in master fasta. ",
-      "Not recommended to modify this parameter."
-    ) {|v| opts[:control_variance] = v }
-
-    op.on(
-      "--case-variance <#{defaults[:case_variance]}>",
-      Integer,
-      "Variance increase for case samples (max lambda for Poisson distribution). ",
-      "The higher the value, the more fold change will occur."
-    ) {|v| opts[:case_variance] = v }
-  end
-
-
-  parser.parse!
-  opts[:filenames] = ARGV.to_a
-
-  if opts[:filenames].size == 0
-    puts parser
-    exit
-  end
-
-  #########################################
-  diff_express_percent, num_case, num_control, control_variance, case_variance = opts.values_at(:diff_express_percent, :num_case, :num_control, :control_variance, :case_variance)
-
-  simulator = MSAbundanceSim.new
-
-  opts[:filenames].each do |filename|
+    simulator = MSAbundanceSim.new
 
     basename = filename.chomp(File.extname(filename))
 
@@ -217,4 +139,106 @@ if __FILE__ == $0
       end
     end
   end
+
+  # returns an array with the beginning part of the entry line (without the
+  # abundance (which begins with a '#') and an array of abundances (all the
+  # numbers, returned as Floats, after the final '#')
+  def parse_entry_line(line)
+    octothorpe_index = line.rindex("#")
+    entry_line_wo_abundance = line[0...octothorpe_index]
+    abundance_str = line[(octothorpe_index+1)..-1]
+    abundances = abundance_str.split(",").map(&:to_f).sort
+    [entry_line_wo_abundance, abundances]
+  end
+
+  def get_protein_entries(filename)
+    protein_entries = []
+    IO.foreach(filename) do |line|
+      line.chomp!
+      if line[0] == ">"
+        protein_entries << ProteinEntry.new(*parse_entry_line(line))
+      else
+        protein_entries.last.additional_lines << line
+      end
+    end
+    protein_entries[0...-1]  # incorrect behavior (dropping last protein)
+  end
+
+  class Commandline
+    class << self
+      def run(argv)
+        parser, opts = create_parser
+        parser.parse!(argv)
+
+        filenames = argv.to_a
+
+        if filenames.size == 0
+          puts parser
+        else
+          MSAbundanceSim.process_files(filenames, opts)
+        end
+      end
+
+      def create_parser
+        defaults = MSAbundanceSim::DEFAULTS
+        opts = MSAbundanceSim::DEFAULTS
+        parser = OptionParser.new do |op|
+          op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
+          op.separator "output: <file>_<n>_<case|control>"
+          op.separator ""
+          op.separator "The file must have one or more abundances per protein entry (the protein"
+          op.separator "sequence following the header line is optional)."
+          op.separator "The abundance is placed at the end of the line following a ' #',"
+          op.separator "with multiple abundances separated with a ','.  Here are two examples:"
+          op.separator ""
+          op.separator "> SWISSAB|23B The anchor protein #23.2"
+          op.separator "> SWISSSPECIAL|24B A green protein #23.2,29.4"
+          op.separator ""
+          op.separator "notes: Protein sequences are optional and files need not end in '.fasta'"
+
+          op.on(
+            "--num-control <#{defaults[:num_control]}>",
+            Integer,
+            "how many control samples to generate"
+          ) {|v| opts[:num_control] = v }
+
+          op.on(
+            "--num-case <#{defaults[:num_case]}>",
+            Integer,
+            "how many case samples to generate"
+          ) {|v| opts[:num_case] = v }
+
+          op.on(
+            "--diff_express_percent <#{defaults[:diff_express_percent]}>",
+            Float,
+            "percent of proteins to differentially express between case and control"
+          ) {|v| opts[:diff_express_percent] = v }
+
+          op.on(
+            "--control-variance <#{defaults[:control_variance]}>",
+            Integer,
+            "Variance for control samples (max lambda for Poisson distribution). ",
+            "The higher the value, the more fold change will occur among healthy populations. ",
+            "Used only when multiple abundances are not provided in master fasta. ",
+            "Not recommended to modify this parameter."
+          ) {|v| opts[:control_variance] = v }
+
+          op.on(
+            "--case-variance <#{defaults[:case_variance]}>",
+            Integer,
+            "Variance increase for case samples (max lambda for Poisson distribution). ",
+            "The higher the value, the more fold change will occur."
+          ) {|v| opts[:case_variance] = v }
+          op.on("--verbose", "talk about it") {|v| $VERBOSE = 3 }
+        end
+        [parser, opts]
+      end
+    end
+  end
 end
+
+if __FILE__ == $0
+  MSAbundanceSim::Commandline.run(ARGV)
+end
+
+

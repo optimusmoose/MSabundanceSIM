@@ -6,17 +6,13 @@
 
 require 'optparse'
 require 'set'
+require 'yaml'
 
 # REMOVE THIS
 srand(47288)
 
 class MSAbundanceSim
   VERSION = "0.1.0"
-end
-
-# puts that respects $VERBOSE
-def putsv(*args)
-  puts(*args) if $VERBOSE
 end
 
 ProteinEntry = Struct.new(:entry_line_wo_abundance, :abundances, :additional_lines) do
@@ -111,9 +107,11 @@ class MSAbundanceSim
     num_proteins_to_diff_express = (protein_entries.size * opts[:diff_express_percent]/100.0).to_i
     diff_expressed_ids = (0...protein_entries.size).to_a.sample(num_proteins_to_diff_express).to_set
 
+    output = Hash.new {|hash, key| hash[key] = [] }
     case_and_controls_needed = ([:case] * opts[:num_case]) + ([:control] * opts[:num_control])
     case_and_controls_needed.each_with_index do |sample_type, sample_number| # for each sample
       outfilename = "#{basename}_#{sample_number}_#{sample_type}"
+      output[sample_type] << outfilename
       File.open(outfilename, 'w') do |outfile|
         protein_entries.each_with_index do |protein_entry, idx|
           # put first line of fasta with simulated abundance
@@ -128,12 +126,11 @@ class MSAbundanceSim
           fold_change = MSAbundanceSim.get_fold_change(protein_entry.abundances, variance, max_abundance)
           sample_abundance = MSAbundanceSim.sample_abundance(protein_entry.abundances, fold_change)
           outfile.puts [protein_entry.entry_line_wo_abundance, sample_abundance].join(opts[:output_abundance_separator])
-          protein_entry.additional_lines.each do |additional_line|
-            outfile.puts additional_line
-          end
+          outfile.puts protein_entry.additional_lines.join("\n")
         end
       end
     end
+    output
   end
 
   # returns an array with the beginning part of the entry line (without the
@@ -171,7 +168,8 @@ class MSAbundanceSim
         if filenames.size == 0
           puts parser
         else
-          MSAbundanceSim.process_files(filenames, opts)
+          output = MSAbundanceSim.process_files(filenames, opts)
+          puts output.to_yaml
         end
       end
 
@@ -180,7 +178,8 @@ class MSAbundanceSim
         opts = MSAbundanceSim::DEFAULTS
         parser = OptionParser.new do |op|
           op.banner = "usage: #{File.basename(__FILE__)} <file>.fasta ..."
-          op.separator "output: <file>_<n>_<case|control>"
+          op.separator "generates: <file>_<n>_<case|control>"
+          op.separator "output: (yaml indicating all the related derivative files)"
           op.separator ""
           op.separator "The file must have one or more abundances per protein entry (the protein"
           op.separator "sequence following the header line is optional)."

@@ -112,7 +112,7 @@ class MSAbundanceSim
     diff_expressed_signs = Array.new(diff_expressed_ids.size){[-1,1].sample}
 
     sample_n = num_case + num_control
-    (0..sample_n).each do |sample_number| # for each sample
+    (0...sample_n).each do |sample_number| # for each sample
       type = "control"
       if sample_number < num_case # make a case sample
         type = "case"

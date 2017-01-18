@@ -10,14 +10,14 @@ real world examples.
 
 # Usage
 
-After installation, type:
+For help using the executable, type:
 
-    ms_abundance_sim
+    msabundancesim
 
 # Standalone usage:
 
-In cases where gems are not convenient, the file lib/ms_abundance_sim.rb may
-be used as its own standalone executable with no dependencies:
+In cases where gems are not convenient, the file `lib/ms_abundance_sim.rb` may
+be used as its own standalone executable with no additional dependencies:
 
     chmod +x lib/ms_abundance_sim.rb
     ./lib/ms_abundance_sim.rb

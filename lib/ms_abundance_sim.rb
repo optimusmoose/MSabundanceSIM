@@ -5,6 +5,7 @@
 # Contact Rob Smith at robert.smith@mso.umt.edu for other licensing options.
 
 require 'optparse'
+require 'set'
 
 # REMOVE THIS
 srand(47288)
@@ -108,28 +109,24 @@ class MSAbundanceSim
     max_abundance = protein_entries.max_by {|entry| entry.abundances.last }.abundances.last
 
     # generate which proteins will be differentially expressed
-    diff_expressed_ids = (0...protein_entries.size).to_a.sample((protein_entries.size * diff_express_percent/100.0).to_i)
+    num_proteins_to_diff_express = (protein_entries.size * diff_express_percent/100.0).to_i
+    diff_expressed_ids = (0...protein_entries.size).to_a.sample(num_proteins_to_diff_express).to_set
 
-    sample_n = num_case + num_control
-    (0...sample_n).each do |sample_number| # for each sample
-      sample_type = "control"
-      if sample_number < num_case # make a case sample
-        sample_type = "case"
-      end
-      puts "Creating sample #{sample_number} of #{sample_n}"
-
-      # create output file
+    case_and_controls_needed = ([:case] * num_case) + ([:control] * num_control)
+    case_and_controls_needed.each_with_index do |sample_type, sample_number| # for each sample
       outfilename = "#{basename}_#{sample_number}_#{sample_type}"
       File.open(outfilename, 'w') do |outfile|
         protein_entries.each_with_index do |protein_entry, idx|
           # put first line of fasta with simulated abundance
-          if sample_type=='case' and diff_expressed_ids.index(idx) != nil
-            protein_type = 'case'
-          else
-            protein_type = 'control'
-          end
+          variance = opts[
+            if sample_type=='case' && diff_expressed_ids.include?(idx)
+              :case_variance
+            else
+              :control_variance
+            end
+          ]
 
-          outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, protein_type=='control' ? control_variance : case_variance, max_abundance))}"
+          outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, variance, max_abundance))}"
           protein_entry.additional_lines.each do |additional_line|
             outfile.puts additional_line
           end

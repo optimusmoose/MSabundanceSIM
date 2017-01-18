@@ -40,7 +40,7 @@ class MSAbundanceSim
     diff_express_percent: 3.0,
     control_variance: 1,
     case_variance: 2,
-    output_abundance_separator: " + #",
+    output_abundance_separator: " #",
   }
 
   class << self

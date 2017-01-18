@@ -119,7 +119,7 @@ class MSAbundanceSim
         protein_entries.each_with_index do |protein_entry, idx|
           # put first line of fasta with simulated abundance
           variance = opts[
-            if sample_type=='case' && diff_expressed_ids.include?(idx)
+            if sample_type == :case && diff_expressed_ids.include?(idx)
               :case_variance
             else
               :control_variance

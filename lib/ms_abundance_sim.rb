@@ -99,20 +99,18 @@ class MSAbundanceSim
   end
 
   def process_file(filename, opts)
-    diff_express_percent, num_case, num_control, control_variance, case_variance = opts.values_at(:diff_express_percent, :num_case, :num_control, :control_variance, :case_variance)
-
-    simulator = MSAbundanceSim.new
+    opts = DEFAULTS.merge(opts)
 
     basename = filename.chomp(File.extname(filename))
 
-    protein_entries = simulator.get_protein_entries(filename)
+    protein_entries = get_protein_entries(filename)
     max_abundance = protein_entries.max_by {|entry| entry.abundances.last }.abundances.last
 
     # generate which proteins will be differentially expressed
-    num_proteins_to_diff_express = (protein_entries.size * diff_express_percent/100.0).to_i
+    num_proteins_to_diff_express = (protein_entries.size * opts[:diff_express_percent]/100.0).to_i
     diff_expressed_ids = (0...protein_entries.size).to_a.sample(num_proteins_to_diff_express).to_set
 
-    case_and_controls_needed = ([:case] * num_case) + ([:control] * num_control)
+    case_and_controls_needed = ([:case] * opts[:num_case]) + ([:control] * opts[:num_control])
     case_and_controls_needed.each_with_index do |sample_type, sample_number| # for each sample
       outfilename = "#{basename}_#{sample_number}_#{sample_type}"
       File.open(outfilename, 'w') do |outfile|

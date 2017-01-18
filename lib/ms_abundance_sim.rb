@@ -40,6 +40,7 @@ class MSAbundanceSim
     diff_express_percent: 3.0,
     control_variance: 1,
     case_variance: 2,
+    output_abundance_separator: " + #",
   }
 
   class << self
@@ -124,7 +125,9 @@ class MSAbundanceSim
             end
           ]
 
-          outfile.puts "#{protein_entry.entry_line_wo_abundance} + ##{MSAbundanceSim.sample_abundance(protein_entry.abundances, MSAbundanceSim.get_fold_change(protein_entry.abundances, variance, max_abundance))}"
+          fold_change = MSAbundanceSim.get_fold_change(protein_entry.abundances, variance, max_abundance)
+          sample_abundance = MSAbundanceSim.sample_abundance(protein_entry.abundances, fold_change)
+          outfile.puts [protein_entry.entry_line_wo_abundance, sample_abundance].join(opts[:output_abundance_separator])
           protein_entry.additional_lines.each do |additional_line|
             outfile.puts additional_line
           end

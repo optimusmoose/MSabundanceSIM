@@ -8,11 +8,8 @@ require 'optparse'
 require 'set'
 require 'yaml'
 
-# REMOVE THIS
-srand(47288)
-
 class MSAbundanceSim
-  VERSION = "0.1.0"
+  VERSION = "0.2.0"
 end
 
 ProteinEntry = Struct.new(:entry_line_wo_abundance, :abundances, :additional_lines) do
@@ -37,6 +34,9 @@ class MSAbundanceSim
     control_variance: 1,
     case_variance: 2,
     output_abundance_separator: " #",
+    downshift_min_threshold: 0,
+    downshift_probability_threshold: 0.75,
+    downshift_amount: 1,
   }
 
   class << self
@@ -75,6 +75,17 @@ class MSAbundanceSim
       pert_fc = norm_fc * rand
       sign = [1,-1].sample
       return pert_fc * sign
+    end
+
+    # takes 'value' and subtracts 'amount' from it if 'value' is greater than
+    # min_threshold AND a random number is less than the probability_threshold
+    # (i.e., a probability of 1 means downshifting will happen to all values).
+    def downshift(value, min_threshold, probability_threshold, amount, random=rand())
+      if (value > min_threshold) && (random < probability_threshold)
+        value - amount
+      else
+        value
+      end
     end
 
     def sample_abundance(abundances, fold_change)
@@ -124,7 +135,15 @@ class MSAbundanceSim
           ]
 
           fold_change = MSAbundanceSim.get_fold_change(protein_entry.abundances, variance, max_abundance)
-          sample_abundance = MSAbundanceSim.sample_abundance(protein_entry.abundances, fold_change)
+
+          downshift_params = %w(min_threshold probability_threshold amount)
+            .map {|key| 'downshift_' + key }
+            .map(&:to_sym)
+            .map {|key| opts[key] }
+
+          downshifted_fold_change = MSAbundanceSim.downshift(fold_change, *downshift_params)
+
+          sample_abundance = MSAbundanceSim.sample_abundance(protein_entry.abundances, downshifted_fold_change)
           outfile.puts [protein_entry.entry_line_wo_abundance, sample_abundance].join(opts[:output_abundance_separator])
           outfile.puts protein_entry.additional_lines.join("\n")
         end
@@ -246,6 +265,28 @@ class MSAbundanceSim
             "  for Poisson distribution). The higher the ",
             "  value the more fold change will occur."
           ) {|v| opts[:case_variance] = v }
+
+          op.on(
+            "--downshift-min-threshold<#{defaults[:downshift_min_threshold]}>",
+            Float,
+            "Min threshold for downshifting some fold changes."
+          ) {|v| opts[:downshift_min_threshold] = v }
+
+          op.on(
+            "--downshift-probability-threshold<#{defaults[:downshift_probability_threshold]}>",
+            Float,
+            "Min probability threshold for downshifting",
+            "some fold changes."
+          ) {|v| opts[:downshift_probability_threshold] = v }
+
+          op.on(
+            "--downshift-amount<#{defaults[:downshift_amount]}>",
+            Float,
+            "Amount the fold change will be altered",
+            "if meeting the threshold and probability-",
+            "threshold."
+          ) {|v| opts[:downshift_amount] = v }
+
           op.on("--verbose", "talk about it") {|v| $VERBOSE = 3 }
         end
         [parser, opts]

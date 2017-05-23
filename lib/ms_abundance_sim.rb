@@ -9,7 +9,7 @@ require 'set'
 require 'yaml'
 
 class MSAbundanceSim
-  VERSION = "0.2.0"
+  VERSION = "0.3.0"
 end
 
 ProteinEntry = Struct.new(:entry_line_wo_abundance, :abundances, :additional_lines) do
@@ -34,9 +34,8 @@ class MSAbundanceSim
     control_variance: 1,
     case_variance: 2,
     output_abundance_separator: " #",
-    downshift_min_threshold: 0,
+    downshift_min_threshold: 1.0,
     downshift_probability_threshold: 0.75,
-    downshift_amount: 1,
   }
 
   class << self
@@ -77,12 +76,13 @@ class MSAbundanceSim
       return pert_fc * sign
     end
 
-    # takes 'value' and subtracts 'amount' from it if 'value' is greater than
-    # min_threshold AND a random number is less than the probability_threshold
-    # (i.e., a probability of 1 means downshifting will happen to all values).
-    def downshift(value, min_threshold, probability_threshold, amount, random=rand())
-      if (value > min_threshold) && (random < probability_threshold)
-        value - amount
+    # takes 'value' and subtracts rand(min_threshold..value) from it if
+    # 'value' is >= min_threshold AND a random number is less than the
+    # probability_threshold (i.e., a probability of 1 means downshifting will
+    # happen to all values).
+    def downshift(value, min_threshold, probability_threshold, random=rand())
+      if (value >= min_threshold) && (random < probability_threshold)
+        value - rand(min_threshold..value)
       else
         value
       end
@@ -136,7 +136,7 @@ class MSAbundanceSim
 
           fold_change = MSAbundanceSim.get_fold_change(protein_entry.abundances, variance, max_abundance)
 
-          downshift_params = %w(min_threshold probability_threshold amount)
+          downshift_params = %w(min_threshold probability_threshold)
             .map {|key| 'downshift_' + key }
             .map(&:to_sym)
             .map {|key| opts[key] }
@@ -278,14 +278,6 @@ class MSAbundanceSim
             "Min probability threshold for downshifting",
             "some fold changes."
           ) {|v| opts[:downshift_probability_threshold] = v }
-
-          op.on(
-            "--downshift-amount<#{defaults[:downshift_amount]}>",
-            Float,
-            "Amount the fold change will be altered",
-            "if meeting the threshold and probability-",
-            "threshold."
-          ) {|v| opts[:downshift_amount] = v }
 
           op.on("--verbose", "talk about it") {|v| $VERBOSE = 3 }
         end

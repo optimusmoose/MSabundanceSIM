@@ -14,7 +14,7 @@ describe MSAbundanceSim do
 
   it "calculates a fold change" do
     reply = MSAbundanceSim.get_fold_change([1.3], 3, 10000)
-    reply.must_equal 0.885067564263667
+    reply.must_equal 3.294632520902303
   end
 
   it "samples the inverse transform" do
@@ -28,11 +28,11 @@ describe MSAbundanceSim do
   end
 
   it "downshifts values" do
-    result = MSAbundanceSim.downshift(value=4, min_threshold=0, probability_threshold=0.75, amount=1.5, random=0.76)
+    result = MSAbundanceSim.downshift(value=4.0, min_threshold=1, probability_threshold=0.75, random=0.76)
     result.must_equal 4
 
-    result = MSAbundanceSim.downshift(value=4, min_threshold=0, probability_threshold=0.75, amount=1.5, random=0.74)
-    result.must_equal 2.5
+    result = MSAbundanceSim.downshift(value=4.0, min_threshold=1, probability_threshold=0.75, random=0.74)
+    result.must_equal 1.4046258423814004
   end
 
 end

@@ -9,7 +9,7 @@ require 'set'
 require 'yaml'
 
 class MSAbundanceSim
-  VERSION = "0.3.0"
+  VERSION = "0.4.0"
 end
 
 ProteinEntry = Struct.new(:entry_line_wo_abundance, :abundances, :additional_lines) do
@@ -68,12 +68,12 @@ class MSAbundanceSim
     end
 
     def get_fold_change(a_i, event_rate, max_abundance)
-      # max fold change at lowest abundance
       raw_fc = inverse_transform_sample(event_rate)
-      norm_fc = raw_fc * (1.0-(a_i[0].to_f / max_abundance))
-      pert_fc = norm_fc * rand
+      inv_share = (1.0-(a_i[0].to_f / max_abundance))
+      norm_fc = raw_fc * inv_share
+      trans = rand(0..inv_share)
       sign = [1,-1].sample
-      return pert_fc * sign
+      return (norm_fc + trans) * sign
     end
 
     # takes 'value' and subtracts rand(min_threshold..value) from it if
